@@ -18,6 +18,8 @@ test("bundles the routing screen and its interactions", async () => {
 
   const source = await readFile(new URL(`assets/${scripts[0]}`, outputRoot), "utf8");
   assert.match(source, /Распределение диалогов/);
+  assert.match(source, /Распределение по каналам/);
+  assert.match(source, /Выберите одного или нескольких менеджеров/);
   assert.match(source, /Назначить/);
   assert.match(source, /На обеде/);
 });

@@ -22,6 +22,8 @@ test("server-renders the routing workspace", async () => {
   const html = await response.text();
   assert.match(html, /<title>DemkovKnife — распределение диалогов<\/title>/i);
   assert.match(html, /Распределение диалогов/);
+  assert.match(html, /Распределение по каналам/);
+  assert.match(html, /Выберите одного или нескольких менеджеров/);
   assert.match(html, /Паничкина Елена/);
   assert.match(html, /На обеде/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);

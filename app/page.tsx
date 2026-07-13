@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 
+import { selectChannelManager, toggleChannelManager } from "./channel-routing.mjs";
+
 type Availability = "free" | "lunch" | "break" | "offline";
 
 type Manager = {
@@ -14,10 +16,12 @@ type Manager = {
   lastAssignedMinute: number;
 };
 
+type Channel = "Telegram" | "WhatsApp" | "Instagram" | "MAX";
+
 type Lead = {
   id: number;
   customer: string;
-  channel: "Telegram" | "WhatsApp" | "Instagram" | "MAX";
+  channel: Channel;
   preview: string;
   wait: string;
   time: string;
@@ -79,6 +83,22 @@ const INITIAL_MANAGERS: Manager[] = [
   },
 ];
 
+const CHANNELS: Channel[] = ["Telegram", "WhatsApp", "Instagram", "MAX"];
+
+const INITIAL_CHANNEL_MANAGERS: Record<Channel, string[]> = {
+  Telegram: ["panichkina", "popkov", "turchina"],
+  WhatsApp: ["popkov"],
+  Instagram: ["panichkina", "turchina"],
+  MAX: ["turchina"],
+};
+
+const STATUS_NAMES: Record<Availability, string> = {
+  free: "Свободен",
+  lunch: "На обеде",
+  break: "Перерыв",
+  offline: "Офлайн",
+};
+
 const INITIAL_QUEUE: Lead[] = [
   {
     id: 1,
@@ -135,8 +155,8 @@ const NEW_LEADS: Lead[] = [
 
 const INITIAL_ASSIGNMENTS: Assignment[] = [
   { id: 101, customer: "Ирина М.", channel: "Telegram", manager: "Паничкина Елена", time: "10:39" },
-  { id: 102, customer: "Александр Г.", channel: "MAX", manager: "Попков Сергей", time: "10:35" },
-  { id: 103, customer: "Вадим Т.", channel: "WhatsApp", manager: "Шубина-Турчина Алина", time: "10:31" },
+  { id: 102, customer: "Александр Г.", channel: "MAX", manager: "Шубина-Турчина Алина", time: "10:35" },
+  { id: 103, customer: "Вадим Т.", channel: "WhatsApp", manager: "Попков Сергей", time: "10:31" },
   { id: 104, customer: "Наталья В.", channel: "Instagram", manager: "Паничкина Елена", time: "10:27" },
 ];
 
@@ -150,6 +170,12 @@ function channelClass(channel: Lead["channel"]) {
   return `channel channel-${channel.toLowerCase()}`;
 }
 
+function managerCountLabel(count: number) {
+  if (count === 1) return "1 менеджер";
+  if (count >= 2 && count <= 4) return `${count} менеджера`;
+  return `${count} менеджеров`;
+}
+
 export default function Home() {
   const [managers, setManagers] = useState(INITIAL_MANAGERS);
   const [queue, setQueue] = useState(INITIAL_QUEUE);
@@ -157,16 +183,27 @@ export default function Home() {
   const [clockMinute, setClockMinute] = useState(642);
   const [leadCursor, setLeadCursor] = useState(0);
   const [freshManager, setFreshManager] = useState<string | null>(null);
+  const [selectedChannel, setSelectedChannel] = useState<Channel>("Telegram");
+  const [channelManagers, setChannelManagers] = useState(INITIAL_CHANNEL_MANAGERS);
 
   const availableManagers = useMemo(
     () => managers.filter((manager) => manager.status === "free"),
     [managers],
   );
 
-  const nextManager = useMemo(
-    () => [...availableManagers].sort((a, b) => a.lastAssignedMinute - b.lastAssignedMinute)[0] ?? null,
-    [availableManagers],
-  );
+  const activeLead = queue[0] ?? null;
+
+  const nextManagerId = useMemo(() => {
+    if (!activeLead) return null;
+    return selectChannelManager(
+      channelManagers[activeLead.channel],
+      availableManagers.map((manager) => manager.id),
+      Object.fromEntries(managers.map((manager) => [manager.id, manager.lastAssignedMinute])),
+    );
+  }, [activeLead, availableManagers, channelManagers, managers]);
+
+  const nextManager = managers.find((manager) => manager.id === nextManagerId) ?? null;
+  const selectedManagerIds = channelManagers[selectedChannel];
 
   const assignedToday = managers.reduce((sum, manager) => sum + manager.assignedToday, 0);
 
@@ -212,6 +249,13 @@ export default function Home() {
     setManagers((current) => current.map((manager) => (manager.id === managerId ? { ...manager, status } : manager)));
   }
 
+  function toggleManagerForChannel(managerId: string) {
+    setChannelManagers((current) => ({
+      ...current,
+      [selectedChannel]: toggleChannelManager(current[selectedChannel], managerId),
+    }));
+  }
+
   return (
     <main className="crm-shell">
       <aside className="sidebar">
@@ -244,6 +288,7 @@ export default function Home() {
             </div>
             <div className="title-actions">
               <div className="work-status"><span className="pulse-dot" />08:00–22:00 · работает</div>
+              <a className="channel-settings-link" href="#channel-rules">Каналы и менеджеры</a>
               <button className="secondary-button" onClick={addLead}><span>＋</span> Новый диалог</button>
             </div>
           </div>
@@ -262,12 +307,19 @@ export default function Home() {
             <article className="metric-card">
               <span>Назначено сегодня</span>
               <strong>{assignedToday}</strong>
-              <small>Равномерно по доступности</small>
+              <small>По каналу и статусу доступности</small>
             </article>
             <article className="metric-card next-card">
               <div>
-                <span>Следующий в круге</span>
-                <strong>{nextManager ? nextManager.name : "Нет свободных"}</strong>
+                <span>Следующий по правилу</span>
+                <strong>{nextManager ? nextManager.name : activeLead ? "Канал ожидает" : "Очередь пуста"}</strong>
+                <small>
+                  {activeLead && nextManager
+                    ? `${activeLead.channel} · выбран для этого канала`
+                    : activeLead
+                      ? `Нет свободных получателей ${activeLead.channel}`
+                      : "Нет новых обращений"}
+                </small>
               </div>
               {nextManager && <div className="mini-avatar" style={{ background: nextManager.color }}>{nextManager.initials}</div>}
             </article>
@@ -301,7 +353,7 @@ export default function Home() {
                       <span className={index === 0 ? "wait-alert" : "wait-normal"}><i />{lead.wait}</span>
                       {index === 0 && (
                         <button className="assign-button" onClick={distributeNext} disabled={!nextManager}>
-                          Назначить {nextManager?.name.split(" ")[0] ?? ""}<span>→</span>
+                          {nextManager ? `Назначить ${nextManager.name.split(" ")[0]}` : "Нет доступного менеджера"}<span>→</span>
                         </button>
                       )}
                     </div>
@@ -353,6 +405,81 @@ export default function Home() {
                 ))}
               </div>
             </article>
+          </section>
+
+          <section className="panel channel-routing-panel" id="channel-rules" aria-labelledby="channel-routing-title">
+            <header className="panel-header channel-routing-header">
+              <div>
+                <h2 id="channel-routing-title">Распределение по каналам</h2>
+                <span>Выберите одного или нескольких менеджеров для каждого канала</span>
+              </div>
+              <div className="rule-state">Изменения применяются сразу</div>
+            </header>
+
+            <div className="channel-routing-body">
+              <div className="rule-group">
+                <span className="rule-label">Канал</span>
+                <div className="channel-chip-list" role="tablist" aria-label="Каналы обращений">
+                  {CHANNELS.map((channel) => (
+                    <button
+                      className={`channel-rule-chip ${selectedChannel === channel ? "channel-rule-chip-active" : ""}`}
+                      key={channel}
+                      type="button"
+                      role="tab"
+                      aria-selected={selectedChannel === channel}
+                      aria-controls="channel-manager-picker"
+                      onClick={() => setSelectedChannel(channel)}
+                    >
+                      <span>
+                        <strong>{channel}</strong>
+                        <small>{managerCountLabel(channelManagers[channel].length)}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rule-group" id="channel-manager-picker" role="tabpanel">
+                <div className="manager-picker-heading">
+                  <div>
+                    <span className="rule-label">Менеджеры</span>
+                    <strong>{selectedChannel}</strong>
+                  </div>
+                  <span className="selected-count">
+                    Выбрано: {selectedManagerIds.length}
+                  </span>
+                </div>
+
+                <div className="manager-chip-list">
+                  {managers.map((manager) => {
+                    const isSelected = selectedManagerIds.includes(manager.id);
+                    return (
+                      <button
+                        className={`manager-rule-chip ${isSelected ? "manager-rule-chip-selected" : ""}`}
+                        key={manager.id}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => toggleManagerForChannel(manager.id)}
+                      >
+                        <span className="manager-chip-name">{manager.name}</span>
+                        <span className={`manager-chip-status chip-status-${manager.status}`}>
+                          {STATUS_NAMES[manager.status]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="channel-rule-note">
+                  <strong>
+                    {selectedManagerIds.length === 1
+                      ? "Все обращения канала идут выбранному менеджеру."
+                      : "Обращения распределяются по кругу между выбранными менеджерами."}
+                  </strong>
+                  <span>Статусы «На обеде», «Перерыв» и «Офлайн» временно исключают менеджера. Последний выбранный чип отключить нельзя.</span>
+                </div>
+              </div>
+            </div>
           </section>
 
           <section className="panel history-panel">
