@@ -140,13 +140,6 @@ const INITIAL_ASSIGNMENTS: Assignment[] = [
   { id: 104, customer: "Наталья В.", channel: "Instagram", manager: "Паничкина Елена", time: "10:27" },
 ];
 
-const STATUS_LABELS: Record<Availability, string> = {
-  free: "Свободен",
-  lunch: "На обеде",
-  break: "Перерыв",
-  offline: "Офлайн",
-};
-
 function formatTime(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60) % 24;
   const minutes = totalMinutes % 60;
